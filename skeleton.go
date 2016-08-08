@@ -128,7 +128,7 @@ func (k *key) getAt(at time.Time) ([]byte, bool) {
 			continue
 		}
 		if v.tombstone {
-			break
+			return nil, true
 		}
 		return v.value, true
 	}
@@ -230,7 +230,10 @@ func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
 				continue
 			}
 			if bytes.Equal(key, delta.key.key) {
-				return delta.key.getAt(at)
+				// If the time isn't found in the delta, look at older data.
+				if v, ok := delta.key.getAt(at); ok {
+					return v, true
+				}
 			}
 			delta = delta.next
 		}
@@ -241,6 +244,31 @@ func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
 // Put writes a value into the database.
 // TODO(d4l3k): Do conflict checks.
 func (db *DB) Put(k, v []byte) {
+	db.putKey(&key{
+		key: k,
+		values: []value{
+			{
+				value: v,
+				time:  time.Now(),
+			},
+		},
+	})
+}
+
+// Delete removes a value from the database.
+func (db *DB) Delete(k []byte) {
+	db.putKey(&key{
+		key: k,
+		values: []value{
+			{
+				tombstone: true,
+				time:      time.Now(),
+			},
+		},
+	})
+}
+
+func (db *DB) putKey(key *key) {
 	for {
 		id := rootPage
 		page := db.getPage(id)
@@ -253,7 +281,7 @@ func (db *DB) Put(k, v []byte) {
 				break
 			}
 
-			if bytes.Compare(d.page.key, k) <= 0 {
+			if bytes.Compare(d.page.key, key.key) <= 0 {
 				id = d.page.right
 			} else {
 				id = d.page.left
@@ -262,15 +290,7 @@ func (db *DB) Put(k, v []byte) {
 		}
 
 		insert := delta{
-			key: &key{
-				key: k,
-				values: []value{
-					{
-						value: v,
-						time:  time.Now(),
-					},
-				},
-			},
+			key:  key,
 			next: d,
 		}
 		if db.savePageNext(id, d, &insert) {

@@ -75,7 +75,6 @@ func TestBasicPut(t *testing.T) {
 
 func TestBasicPutGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -93,8 +92,44 @@ func TestBasicPutGet(t *testing.T) {
 		k := intToKey(i)
 		out, _ := db.Get(k)
 		if !bytes.Equal(out, k) {
-			spew.Dump(db)
-			t.Fatalf("expected db.Get(%q) = %q; not %q", k, out, k)
+			t.Fatalf("db.Get(%q) = %q; not %q", k, out, k)
+		}
+	}
+}
+
+func TestBasicPutDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 1000
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Put(k, k)
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		out, _ := db.Get(k)
+		if !bytes.Equal(out, k) {
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, k)
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Delete(k)
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		out, _ := db.Get(k)
+		if out != nil {
+			t.Errorf("db.Get(%q) = %q; not nil", k, out)
 		}
 	}
 }
