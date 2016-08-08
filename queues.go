@@ -53,20 +53,18 @@ func (db *DB) consolidate(id pageID) {
 		// TODO(d4l3k): Optimize memory allocations and copies.
 		newPage = *page
 		newPage.keys = make([]*key, 0, len(page.keys)+len(keys))
-		var i, j int
-		for i < len(page.keys) || j < len(keys) {
-
+		for i, j := 0, 0; i < len(page.keys) || j < len(keys); {
 			if i < len(page.keys) && (j >= len(keys) || bytes.Compare(page.keys[i].key, keys[j].key) <= 0) {
 				newKey := page.keys[i].clone()
 				newPage.keys = append(newPage.keys, &newKey)
 				i++
 			} else if j < len(keys) {
 				b := keys[j]
-				var prevKey key
+				var prevKey *key
 				if len(newPage.keys) > 0 {
-					prevKey = *newPage.keys[len(newPage.keys)-1]
+					prevKey = newPage.keys[len(newPage.keys)-1]
 				}
-				if bytes.Equal(b.key, prevKey.key) {
+				if prevKey != nil && bytes.Equal(b.key, prevKey.key) {
 					prevKey.values = append(append([]value{}, b.values...), prevKey.values...)
 				} else {
 					newKey := b.clone()

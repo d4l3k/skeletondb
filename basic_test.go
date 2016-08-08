@@ -5,15 +5,18 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 )
 
 func intToKey(i int) []byte {
-	return []byte("key" + strconv.Itoa(i))
+	return intPrefix("key", i)
+}
+func intPrefix(prefix string, i int) []byte {
+	return []byte(prefix + strconv.Itoa(i))
 }
 
 // TestNewDBConfig makes sure a new DB with a nil config uses DefaultConfig.
@@ -130,6 +133,61 @@ func TestBasicPutDelete(t *testing.T) {
 		out, _ := db.Get(k)
 		if out != nil {
 			t.Errorf("db.Get(%q) = %q; not nil", k, out)
+		}
+	}
+}
+
+func TestBasicGetAt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 1000
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		v := intPrefix("old-val", i)
+		db.Put(k, v)
+	}
+
+	initialWrite := time.Now()
+
+	// Test read at old time.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		v := intPrefix("old-val", i)
+		out, _ := db.GetAt(k, initialWrite)
+		if !bytes.Equal(out, v) {
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, v)
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		v := intPrefix("new-val", i)
+		db.Put(k, v)
+	}
+
+	// Test read at old time.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		v := intPrefix("old-val", i)
+		out, _ := db.GetAt(k, initialWrite)
+		if !bytes.Equal(out, v) {
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, v)
+		}
+	}
+
+	// Test normal read.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		v := intPrefix("new-val", i)
+		out, _ := db.Get(k)
+		if !bytes.Equal(out, v) {
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, v)
 		}
 	}
 }
