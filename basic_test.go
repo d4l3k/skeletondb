@@ -6,8 +6,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/pkg/errors"
 )
 
 func intToKey(i int) []byte {
@@ -74,7 +76,7 @@ func TestBasicPut(t *testing.T) {
 func TestBasicPutGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const count = 10000
+	const count = 1000
 
 	db, err := NewDB(nil)
 	if err != nil {
@@ -136,4 +138,37 @@ func TestConcurrentPutGet(t *testing.T) {
 	}
 	done.Wait()
 	t.Log("done done")
+}
+
+func TestConsolidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 1000
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Write a bunch of data in so deltas are created.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Put(k, k)
+	}
+	// Consolidation only triggers on gets.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Get(k)
+	}
+
+	util.SucceedsSoon(t, func() error {
+		for i := range db.pages {
+			id := pageID(i + 1)
+			count := db.getDeltaCount(id)
+			if count > db.config.MaxDeltaCount {
+				return errors.Errorf("page %d: delta count = %d; not <= %d", id, count, db.config.MaxDeltaCount)
+			}
+		}
+		return nil
+	})
 }
