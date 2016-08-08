@@ -17,11 +17,18 @@ var zeroTime = time.Unix(0, 0)
 
 // DB is a skeletondb instance.
 type DB struct {
-	pages            []*delta
+	pages            *[]*delta
 	splitQueue       chan pageID
 	consolidateQueue chan pageID
 	closed           chan struct{}
 	config           Config
+	// largetPageID is automatically incremented when a new page is created.
+	largestPageID int64
+	pageIDPool    chan pageID
+}
+
+type unsafeDB struct {
+	pages unsafe.Pointer
 }
 
 // NewDB creates a new database.
@@ -37,17 +44,48 @@ func NewDB(c *Config) (*DB, error) {
 		splitQueue:       make(chan pageID, 10),
 		consolidateQueue: make(chan pageID, 10),
 		closed:           make(chan struct{}),
-		pages: []*delta{
+		pages: &[]*delta{
 			{
 				next: &delta{
 					page: &page{id: 1},
 				},
 			},
 		},
-		config: *c,
+		config:        *c,
+		largestPageID: 1,
+		pageIDPool:    make(chan pageID, 10),
 	}
 	go db.workerLoop()
 	return db, nil
+}
+
+// nextPageID returns the next available pageID, either from the pool, or by
+// incrementing the largestPageID.
+func (db *DB) nextPageID() pageID {
+	var id pageID
+	select {
+	case id = <-db.pageIDPool:
+	default:
+		id = pageID(atomic.AddInt64(&db.largestPageID, 1))
+	}
+
+	for old := db.pages; int(id) > len(*old); {
+		nLen := len(*old) * 2
+		if nLen == 0 {
+			nLen = 1
+		}
+		new := make([]*delta, nLen)
+		copy(new, *old)
+		for i := len(*old); i < nLen; i++ {
+			new[i] = &delta{}
+		}
+
+		unsafeDB := (*unsafeDB)(unsafe.Pointer(db))
+		if atomic.CompareAndSwapPointer(&unsafeDB.pages, unsafe.Pointer(old), unsafe.Pointer(&new)) {
+			break
+		}
+	}
+	return id
 }
 
 // Close closes the database and all workers.
@@ -119,6 +157,26 @@ type delta struct {
 	next *delta
 	key  *key
 	page *page
+}
+
+func (d delta) copy() *delta {
+	return &d
+}
+
+func (d *delta) deltaCount() int {
+	var count int
+	for d.next != nil {
+		count++
+		d = d.next
+	}
+	return count
+}
+
+func (d *delta) getPage() *page {
+	for d.next != nil {
+		d = d.next
+	}
+	return d.page
 }
 
 type unsafeDelta struct {
@@ -218,16 +276,19 @@ func (db *DB) Put(k, v []byte) {
 		if db.savePageNext(id, d, &insert) {
 			break
 		}
-		//log.Printf("failed to save %+v %+v %+v %+v %+v", id, db.pages[id].next, page.next, d, &insert)
 	}
 }
 
 func (db *DB) getPage(id pageID) *delta {
-	return db.pages[id-1]
+	return (*db.pages)[id-1]
 }
 
 func (db *DB) savePageNext(id pageID, old, new *delta) bool {
 	page := db.getPage(id)
 	unsafePage := (*unsafeDelta)(unsafe.Pointer(page))
 	return atomic.CompareAndSwapPointer(&unsafePage.next, unsafe.Pointer(old), unsafe.Pointer(new))
+}
+
+func (db *DB) getDeltaCount(id pageID) int {
+	return db.getPage(id).deltaCount()
 }

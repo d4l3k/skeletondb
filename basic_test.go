@@ -140,6 +140,8 @@ func TestConcurrentPutGet(t *testing.T) {
 	t.Log("done done")
 }
 
+// TestConsolidate tests that deltas will be correctly consolidated when there
+// are too many of them.
 func TestConsolidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const count = 1000
@@ -162,11 +164,51 @@ func TestConsolidate(t *testing.T) {
 	}
 
 	util.SucceedsSoon(t, func() error {
-		for i := range db.pages {
+		for i := range *db.pages {
 			id := pageID(i + 1)
 			count := db.getDeltaCount(id)
 			if count > db.config.MaxDeltaCount {
 				return errors.Errorf("page %d: delta count = %d; not <= %d", id, count, db.config.MaxDeltaCount)
+			}
+		}
+		return nil
+	})
+}
+
+// TestSplit tests that nodes are split when they get too large.
+func TestSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 1000
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Write a bunch of data in so deltas are created.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Put(k, k)
+	}
+	// Splits only triggers on gets.
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Get(k)
+	}
+
+	util.SucceedsSoon(t, func() error {
+		for i := range *db.pages {
+			id := pageID(i + 1)
+			page := db.getPage(id).getPage()
+			// Since we're iterating over the entire page table, there might be nil
+			// entries.
+			if page == nil {
+				continue
+			}
+			count := len(page.keys)
+			if count > db.config.MaxKeysPerNode {
+				return errors.Errorf("page %d: key count = %d; not <= %d", id, count, db.config.MaxKeysPerNode)
 			}
 		}
 		return nil

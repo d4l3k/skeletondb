@@ -27,12 +27,7 @@ func (db *DB) consolidate(id pageID) {
 		root := db.getPage(id).next
 
 		// Count deltas to ensure that we don't do unnecessary work.
-		deltaCount := 0
-		for d := root; d != nil; d = d.next {
-			if d.key != nil && (d.key.transaction == nil || d.key.transaction.status == StatusCommitted) {
-				deltaCount++
-			}
-		}
+		deltaCount := root.deltaCount()
 		if deltaCount <= db.config.MaxDeltaCount {
 			return
 		}
@@ -83,16 +78,19 @@ func (db *DB) consolidate(id pageID) {
 
 		newRoot := &delta{page: &newPage}
 		if db.savePageNext(id, root, newRoot) {
-			log.Printf("consolidate %+v: finish", id)
+			log.Printf("consolidate %+v: finish, merged %d, key count = %d", id, deltaCount, len(newPage.keys))
 			break
 		}
 		log.Printf("consolidate %+v: conflict, retrying", id)
 	}
+	db.maybeQueueSplit(newPage)
+}
 
+func (db *DB) maybeQueueSplit(p page) {
 	// Schedule node for splitting if it's too large.
-	if len(newPage.keys) > db.config.MaxKeysPerNode {
+	if len(p.keys) > db.config.MaxKeysPerNode {
 		select {
-		case db.splitQueue <- newPage.id:
+		case db.splitQueue <- p.id:
 		default:
 		}
 	}
@@ -100,5 +98,45 @@ func (db *DB) consolidate(id pageID) {
 
 // split splits a page.
 func (db *DB) split(id pageID) {
-	log.Printf("splitting %+v", id)
+	log.Printf("split %+v: scheduled", id)
+	for {
+		root := db.getPage(id).next
+		p := root.getPage()
+		// Count keys to ensure that we don't do unnecessary work.
+		if len(p.keys) <= db.config.MaxKeysPerNode {
+			return
+		}
+		log.Printf("split %+v: start, key count = %d", id, len(p.keys))
+
+		mid := len(p.keys) / 2
+		left := page{
+			id:   db.nextPageID(),
+			keys: p.keys[:mid],
+		}
+		right := page{
+			id:   db.nextPageID(),
+			keys: p.keys[mid:],
+		}
+		newPage := page{
+			id:    p.id,
+			key:   p.keys[mid].key,
+			left:  left.id,
+			right: right.id,
+		}
+
+		// These sets don't have to be atomic since these IDs haven't been used yet.
+		db.getPage(left.id).next = &delta{page: &left}
+		db.getPage(right.id).next = &delta{page: &right}
+
+		newRoot := &delta{page: &newPage}
+		if db.savePageNext(id, root, newRoot) {
+			log.Printf("split %+v: finish", id)
+			db.maybeQueueSplit(left)
+			db.maybeQueueSplit(right)
+			break
+		}
+		log.Printf("split %+v: conflict, retrying", id)
+		db.pageIDPool <- left.id
+		db.pageIDPool <- right.id
+	}
 }
