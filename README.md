@@ -1,6 +1,6 @@
 # skeletondb [![GoDoc](https://godoc.org/github.com/d4l3k/skeletondb?status.svg)](https://godoc.org/github.com/d4l3k/skeletondb) [![Build Status](https://travis-ci.org/d4l3k/skeletondb.svg?branch=master)](https://travis-ci.org/d4l3k/skeletondb)
 
-SkeletonDB is a lock-less thread safe MVCC store.
+SkeletonDB is a lock-less thread safe in memory MVCC store written in Go.
 
 
 ## Implementation
