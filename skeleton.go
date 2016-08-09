@@ -157,37 +157,6 @@ type page struct {
 	right pageID
 }
 
-// delta represents a single change to be applied to a page.
-type delta struct {
-	next *delta
-	key  *key
-	page *page
-}
-
-func (d delta) clone() *delta {
-	return &d
-}
-
-func (d *delta) deltaCount() int {
-	var count int
-	for d.next != nil {
-		count++
-		d = d.next
-	}
-	return count
-}
-
-func (d *delta) getPage() *page {
-	for d.next != nil {
-		d = d.next
-	}
-	return d.page
-}
-
-type unsafeDelta struct {
-	next unsafe.Pointer
-}
-
 // Get gets a value from the database.
 func (db *DB) Get(key []byte) ([]byte, bool) {
 	return db.getAt(nil, key, zeroTime)
