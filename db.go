@@ -167,11 +167,29 @@ func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
 	return db.getAt(nil, key, at)
 }
 
-func (db *DB) getAt(txn *Txn, key []byte, at time.Time) ([]byte, bool) {
+func (db *DB) getAt(txn *Txn, k []byte, at time.Time) ([]byte, bool) {
 	id := rootPage
-	delta := db.getPage(id).next
+	page := db.getPage(id)
+	delta := page.next
 	deltaCount := 0
 	defer func() {
+		// If there is a pending transaction, abort the current transaction.
+		if txn != nil {
+			if t := page.hasPendingTxn(k); t != nil && t != txn {
+				if err := txn.Close(); err != nil {
+					panic("txn should not already be closed")
+				}
+			} else {
+				if err := db.putKey(&key{
+					key:  k,
+					txn:  txn,
+					read: true,
+				}); err != nil {
+					panic("error adding read intent")
+				}
+			}
+		}
+
 		// Check if the depth is too high, and if so, queue for consolidation.
 		if deltaCount > db.config.MaxDeltaCount {
 			db.consolidateQueue <- id
@@ -183,17 +201,18 @@ func (db *DB) getAt(txn *Txn, key []byte, at time.Time) ([]byte, bool) {
 		}
 
 		if delta.page != nil { // Check page for match.
-			page := delta.page
-			if page.key != nil { // Index node
-				if bytes.Compare(page.key, key) <= 0 {
-					id = page.right
+			dPage := delta.page
+			if dPage.key != nil { // Index node
+				if bytes.Compare(dPage.key, k) <= 0 {
+					id = dPage.right
 				} else {
-					id = page.left
+					id = dPage.left
 				}
-				delta = db.getPage(id).next
+				page = db.getPage(id)
+				delta = page.next
 			} else { // Data node
-				for _, entry := range page.keys {
-					if bytes.Equal(entry.key, key) {
+				for _, entry := range dPage.keys {
+					if bytes.Equal(entry.key, k) {
 						return entry.getAt(txn, at)
 					}
 				}
@@ -208,7 +227,7 @@ func (db *DB) getAt(txn *Txn, key []byte, at time.Time) ([]byte, bool) {
 				delta = delta.next
 				continue
 			}
-			if bytes.Equal(key, delta.key.key) {
+			if bytes.Equal(k, delta.key.key) {
 				// If the time isn't found in the delta, look at older data.
 				if v, ok := delta.key.getAt(txn, at); ok {
 					return v, true
@@ -221,12 +240,12 @@ func (db *DB) getAt(txn *Txn, key []byte, at time.Time) ([]byte, bool) {
 }
 
 // Put writes a value into the database.
-func (db *DB) Put(k, v []byte) {
-	db.put(nil, k, v)
+func (db *DB) Put(k, v []byte) error {
+	return db.put(nil, k, v)
 }
 
-func (db *DB) put(txn *Txn, k, v []byte) {
-	db.putKey(&key{
+func (db *DB) put(txn *Txn, k, v []byte) error {
+	return db.putKey(&key{
 		key: k,
 		txn: txn,
 		values: []value{
@@ -278,14 +297,11 @@ func (db *DB) putKey(key *key) error {
 		}
 
 		// Check for pending transactions on the same key.
-		for d2 := d; d2 != nil; d2 = d2.next {
-			k := d2.key
-			if k == nil || k.txn == nil || k.txn == key.txn || k.txn.status != StatusPending {
-				continue
+		if txn := d.hasPendingTxn(key.key); txn != nil && txn != key.txn {
+			if err := key.txn.Close(); err != nil {
+				return err
 			}
-			if bytes.Equal(k.key, key.key) {
-				return ErrTxnConflict
-			}
+			return ErrTxnConflict
 		}
 
 		insert := delta{

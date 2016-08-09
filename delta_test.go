@@ -90,6 +90,9 @@ func TestDeltaGetPage(t *testing.T) {
 func TestDeltaHasPendingTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	k := []byte("foo")
+	k2 := []byte("bar")
+
 	testCases := []struct {
 		d        *delta
 		expected bool
@@ -99,12 +102,17 @@ func TestDeltaHasPendingTxn(t *testing.T) {
 			false,
 		},
 		{
-			&delta{key: &key{}},
+			&delta{
+				key: &key{
+					key: k,
+				},
+			},
 			false,
 		},
 		{
 			&delta{
 				key: &key{
+					key: k,
 					txn: &Txn{},
 				},
 			},
@@ -113,6 +121,7 @@ func TestDeltaHasPendingTxn(t *testing.T) {
 		{
 			&delta{
 				key: &key{
+					key: k,
 					txn: &Txn{
 						status: StatusPending,
 					},
@@ -124,6 +133,7 @@ func TestDeltaHasPendingTxn(t *testing.T) {
 			&delta{
 				next: &delta{
 					key: &key{
+						key: k,
 						txn: &Txn{
 							status: StatusCommitted,
 						},
@@ -136,8 +146,9 @@ func TestDeltaHasPendingTxn(t *testing.T) {
 			&delta{
 				next: &delta{
 					key: &key{
+						key: k2,
 						txn: &Txn{
-							status: StatusCommitted,
+							status: StatusPending,
 						},
 					},
 				},
@@ -147,8 +158,8 @@ func TestDeltaHasPendingTxn(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		if out := tc.d.hasPendingTxn(); out != tc.expected {
-			t.Errorf("%d: %v.hasPendingTxn() = %v; not %v", i, tc.d, out, tc.expected)
+		if out := tc.d.hasPendingTxn(k); (out != nil) != tc.expected {
+			t.Errorf("%d: %v.hasPendingTxn() = %v; expected %v", i, tc.d, out, tc.expected)
 		}
 	}
 }

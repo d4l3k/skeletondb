@@ -142,7 +142,9 @@ func TestTransactionPendingConsolidate(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Put(k, k)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	k := intToKey(-100)
@@ -179,7 +181,9 @@ func TestTransactionPendingSplit(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Put(k, k)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	k := intToKey(-100)
@@ -216,22 +220,28 @@ func TestDBTxn(t *testing.T) {
 	defer db.Close()
 
 	k := []byte("key")
-	db.Put(k, []byte{0})
+	if err := db.Put(k, []byte{0}); err != nil {
+		t.Fatal(err)
+	}
 
 	txn := db.NewTxn()
-	txn.Put(k, []byte{1})
+	if err := txn.Put(k, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
 
 	times := 0
 	if err := db.Txn(func(t *Txn) error {
-		if times == 2 {
-			txn.Commit()
+		if times >= 2 {
+			if err := txn.Commit(); err != nil {
+				return errors.Wrap(err, "txn.Commit() failed")
+			}
 		}
 		a, _ := t.Get(k)
 		t.Put(k, []byte{a[0] + 1})
 		times++
 		return nil
 	}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	if times != 3 {

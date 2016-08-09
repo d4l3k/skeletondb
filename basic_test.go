@@ -72,7 +72,9 @@ func TestBasicPut(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Put(k, k)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -88,7 +90,9 @@ func TestBasicPutGet(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Put(k, k)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for i := 0; i < count; i++ {
@@ -112,7 +116,9 @@ func TestBasicPutDelete(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Put(k, k)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for i := 0; i < count; i++ {
@@ -125,7 +131,9 @@ func TestBasicPutDelete(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
-		db.Delete(k)
+		if err := db.Delete(k); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for i := 0; i < count; i++ {
@@ -150,7 +158,9 @@ func TestBasicGetAt(t *testing.T) {
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
 		v := intPrefix("old-val", i)
-		db.Put(k, v)
+		if err := db.Put(k, v); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	initialWrite := time.Now()

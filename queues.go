@@ -45,8 +45,11 @@ func (db *DB) consolidate(id pageID) {
 				// - Merge committed transactions.
 				// - Keep pending transactions as deltas for easier cleanup.
 				// - Discard aborted transactions.
+				// - Discard read intents.
 				if d.key.txn == nil || d.key.txn.status == StatusCommitted {
-					keys = append(keys, d.key)
+					if !d.key.read {
+						keys = append(keys, d.key)
+					}
 				} else if d.key.txn.status == StatusPending {
 					d2 := d.clone()
 					d2.next = nil

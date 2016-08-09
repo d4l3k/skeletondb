@@ -56,7 +56,7 @@ func (db *DB) Txn(f func(*Txn) error) error {
 
 func (t *Txn) finish(status TransactionStatus) error {
 	if !atomic.CompareAndSwapInt64((*int64)(&t.status), int64(StatusPending), int64(status)) {
-		return errors.Wrapf(ErrTxnConflict, "status = %v", t.status)
+		return ErrTxnConflict
 	}
 	return nil
 }
@@ -77,13 +77,13 @@ func (t Txn) Status() TransactionStatus {
 }
 
 // Put writes a value into the database.
-func (t *Txn) Put(k, v []byte) {
-	t.db.put(t, k, v)
+func (t *Txn) Put(k, v []byte) error {
+	return t.db.put(t, k, v)
 }
 
 // Delete removes a value from the database.
-func (t *Txn) Delete(k []byte) {
-	t.db.delete(t, k)
+func (t *Txn) Delete(k []byte) error {
+	return t.db.delete(t, k)
 }
 
 // Get gets a value from the database.

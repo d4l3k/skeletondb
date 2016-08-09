@@ -1,6 +1,9 @@
 package skeleton
 
-import "unsafe"
+import (
+	"bytes"
+	"unsafe"
+)
 
 // delta represents a single change to be applied to a page.
 type delta struct {
@@ -26,14 +29,17 @@ func (d *delta) deltaCount() int {
 }
 
 // hasPendingTxn returns whether the delta or it's children has a pending
-// transaction.
-func (d *delta) hasPendingTxn() bool {
+// transaction on the specified key.
+func (d *delta) hasPendingTxn(k []byte) *Txn {
 	for ; d != nil; d = d.next {
+		if d.key == nil || !bytes.Equal(d.key.key, k) {
+			continue
+		}
 		if d.isPending() {
-			return true
+			return d.key.txn
 		}
 	}
-	return false
+	return nil
 }
 
 // isPending returns whether the current delta is part of a pending transaction.
