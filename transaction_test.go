@@ -96,7 +96,11 @@ func TestTransactionPutCommit(t *testing.T) {
 	}
 }
 
+// TestTransactionSerializability tests that when two transactions conflict, one
+// is committed and the other is aborted.
 func TestTransactionSerializability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	db, err := NewDB(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -121,5 +125,42 @@ func TestTransactionSerializability(t *testing.T) {
 	// First transaction should be fine.
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestTransactionPendingConsolidate tests that consolidation doesn't
+// consolidate pending transactions.
+func TestTransactionPendingConsolidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 10
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Put(k, k)
+	}
+
+	k := intToKey(-100)
+	txn := db.NewTxn()
+	txn.Put(k, k)
+
+	// Force consolidation.
+	db.consolidate(rootPage)
+
+	if v, _ := db.Get(k); v != nil {
+		t.Fatalf("db.Get(%q) = %q; not nil", k, v)
+	}
+
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if v, _ := db.Get(k); !bytes.Equal(v, k) {
+		t.Fatalf("db.Get(%q) = %q; not %q", k, v, k)
 	}
 }

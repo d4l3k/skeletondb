@@ -3,9 +3,13 @@ package skeleton
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestDeltaIsPending(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testCases := []struct {
 		d        *delta
 		expected bool
@@ -56,6 +60,8 @@ func TestDeltaIsPending(t *testing.T) {
 }
 
 func TestDeltaGetPage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testCases := []struct {
 		d        *delta
 		expected *page
@@ -82,6 +88,8 @@ func TestDeltaGetPage(t *testing.T) {
 }
 
 func TestDeltaHasPendingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testCases := []struct {
 		d        *delta
 		expected bool
