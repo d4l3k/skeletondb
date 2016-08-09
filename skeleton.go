@@ -96,11 +96,13 @@ func (db *DB) Close() {
 	close(db.closed)
 }
 
-// Key represents a single key with potentially multiple values.
+// Key represents a single key with potentially multiple values. A key with no
+// values represents a read intent.
 type key struct {
 	key    []byte
 	txn    *Txn
 	values []value
+	read   bool // read is whether this key is a get intent
 }
 
 func (k key) clone() key {
@@ -268,12 +270,12 @@ func (db *DB) put(txn *Txn, k, v []byte) {
 }
 
 // Delete removes a value from the database.
-func (db *DB) Delete(k []byte) {
-	db.delete(nil, k)
+func (db *DB) Delete(k []byte) error {
+	return db.delete(nil, k)
 }
 
-func (db *DB) delete(txn *Txn, k []byte) {
-	db.putKey(&key{
+func (db *DB) delete(txn *Txn, k []byte) error {
+	return db.putKey(&key{
 		key: k,
 		txn: txn,
 		values: []value{
@@ -285,7 +287,7 @@ func (db *DB) delete(txn *Txn, k []byte) {
 	})
 }
 
-func (db *DB) putKey(key *key) {
+func (db *DB) putKey(key *key) error {
 	for {
 		id := rootPage
 		page := db.getPage(id)
@@ -306,6 +308,17 @@ func (db *DB) putKey(key *key) {
 			d = db.getPage(id).next
 		}
 
+		// Check for pending transactions on the same key.
+		for d2 := d; d2 != nil; d2 = d2.next {
+			k := d2.key
+			if k == nil || k.txn == nil || k.txn == key.txn || k.txn.status != StatusPending {
+				continue
+			}
+			if bytes.Equal(k.key, key.key) {
+				return ErrTxnConflict
+			}
+		}
+
 		insert := delta{
 			key:  key,
 			next: d,
@@ -314,6 +327,7 @@ func (db *DB) putKey(key *key) {
 			break
 		}
 	}
+	return nil
 }
 
 func (db *DB) getPage(id pageID) *delta {
