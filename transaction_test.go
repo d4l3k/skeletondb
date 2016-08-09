@@ -164,3 +164,81 @@ func TestTransactionPendingConsolidate(t *testing.T) {
 		t.Fatalf("db.Get(%q) = %q; not %q", k, v, k)
 	}
 }
+
+// TestTransactionPendingSplit tests that splits handle pending transactions
+// correctly.
+func TestTransactionPendingSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 200
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		db.Put(k, k)
+	}
+
+	k := intToKey(-100)
+	txn := db.NewTxn()
+	txn.Put(k, k)
+
+	// Force consolidation and splitting
+	db.consolidate(rootPage)
+	db.split(rootPage)
+
+	if v, _ := db.Get(k); v != nil {
+		t.Fatalf("db.Get(%q) = %q; not nil", k, v)
+	}
+
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if v, _ := db.Get(k); !bytes.Equal(v, k) {
+		t.Fatalf("db.Get(%q) = %q; not %q", k, v, k)
+	}
+}
+
+// TestDBTxn tests that splits handle pending transactions
+// correctly.
+func TestDBTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 200
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	k := []byte("key")
+	db.Put(k, []byte{0})
+
+	txn := db.NewTxn()
+	txn.Put(k, []byte{1})
+
+	times := 0
+	if err := db.Txn(func(t *Txn) error {
+		if times == 2 {
+			txn.Commit()
+		}
+		a, _ := t.Get(k)
+		t.Put(k, []byte{a[0] + 1})
+		times++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if times != 3 {
+		t.Fatalf("db.Txn ran %d times; not 3", times)
+	}
+	expected := []byte{2}
+	if v, _ := db.Get(k); !bytes.Equal(v, expected) {
+		t.Fatalf("db.Get(%q) = %q; not %q", k, v, expected)
+	}
+}
