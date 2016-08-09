@@ -95,3 +95,31 @@ func TestTransactionPutCommit(t *testing.T) {
 		}
 	}
 }
+
+func TestTransactionSerializability(t *testing.T) {
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	k := intToKey(1)
+	k2 := intToKey(2)
+
+	// Create a transaction with read and write intents.
+	txn := db.NewTxn()
+	txn.Get(k)
+	txn.Put(k2, k2)
+
+	// Write conflict.
+	txn2 := db.NewTxn()
+	txn2.Put(k, k)
+	if err := txn2.Commit(); err != ErrTxnConflict {
+		t.Fatalf("err = %v; not %v", err, ErrTxnConflict)
+	}
+
+	// First transaction should be fine.
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
