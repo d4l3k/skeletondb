@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-// workerLoop process the split and consolidate queues.
+// workerLoop process the various queues.
 func (db *DB) workerLoop() {
 	for {
 		select {
@@ -36,9 +36,28 @@ func (db *DB) consolidate(id pageID) {
 		// Build slice of deltas sorted by their keys.
 		var page *page
 		var keys []*key
+		// Also keep track of deltas that can't be merged.
+		var head, tail *delta
+
 		for d := root; d != nil; d = d.next {
-			if d.key != nil && (d.key.transaction == nil || d.key.transaction.status == StatusCommitted) {
-				keys = append(keys, d.key)
+			if d.key != nil {
+				// This does some subtle things with transactions.
+				// - Merge committed transactions.
+				// - Keep pending transactions as deltas for easier cleanup.
+				// - Discard aborted transactions.
+				if d.key.txn == nil || d.key.txn.status == StatusCommitted {
+					keys = append(keys, d.key)
+				} else if d.key.txn.status == StatusPending {
+					d2 := d.clone()
+					d2.next = nil
+					if tail != nil {
+						tail.next = d2
+					}
+					if head == nil {
+						head = d2
+					}
+					tail = d2
+				}
 			}
 			if d.page != nil {
 				page = d.page
@@ -75,7 +94,12 @@ func (db *DB) consolidate(id pageID) {
 		}
 
 		newRoot := &delta{page: &newPage}
-		if db.savePageNext(id, root, newRoot) {
+		if head == nil {
+			head = newRoot
+		} else {
+			tail.next = newRoot
+		}
+		if db.savePageNext(id, root, head) {
 			log.Printf("consolidate %+v: finish, merged %d, key count = %d", id, deltaCount, len(newPage.keys))
 			break
 		}
@@ -107,24 +131,43 @@ func (db *DB) split(id pageID) {
 		log.Printf("split %+v: start, key count = %d", id, len(p.keys))
 
 		mid := len(p.keys) / 2
+		midKey := p.keys[mid].key
 		left := page{
 			id:   db.nextPageID(),
 			keys: p.keys[:mid],
+		}
+		leftPage := &delta{
+			page: &left,
 		}
 		right := page{
 			id:   db.nextPageID(),
 			keys: p.keys[mid:],
 		}
+		rightPage := &delta{
+			page: &right,
+		}
 		newPage := page{
 			id:    p.id,
-			key:   p.keys[mid].key,
+			key:   midKey,
 			left:  left.id,
 			right: right.id,
 		}
 
+		// Move any existing deltas onto the new children.
+		for d := root; d.next != nil; d = d.next {
+			d2 := d.clone()
+			if bytes.Compare(midKey, d2.key.key) <= 0 {
+				d2.next = rightPage
+				rightPage = d2
+			} else {
+				d2.next = leftPage
+				leftPage = d2
+			}
+		}
+
 		// These sets don't have to be atomic since these IDs haven't been used yet.
-		db.getPage(left.id).next = &delta{page: &left}
-		db.getPage(right.id).next = &delta{page: &right}
+		db.getPage(left.id).next = leftPage
+		db.getPage(right.id).next = rightPage
 
 		newRoot := &delta{page: &newPage}
 		if db.savePageNext(id, root, newRoot) {

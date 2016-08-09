@@ -95,7 +95,7 @@ func TestBasicPutGet(t *testing.T) {
 		k := intToKey(i)
 		out, _ := db.Get(k)
 		if !bytes.Equal(out, k) {
-			t.Fatalf("db.Get(%q) = %q; not %q", k, out, k)
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, k)
 		}
 	}
 }

@@ -17,14 +17,17 @@ var zeroTime = time.Unix(0, 0)
 
 // DB is a skeletondb instance.
 type DB struct {
-	pages            *[]*delta
-	splitQueue       chan pageID
-	consolidateQueue chan pageID
-	closed           chan struct{}
-	config           Config
+	pages  *[]*delta
+	closed chan struct{}
+	config Config
+
 	// largetPageID is automatically incremented when a new page is created.
 	largestPageID int64
 	pageIDPool    chan pageID
+
+	// Queues
+	splitQueue       chan pageID
+	consolidateQueue chan pageID
 }
 
 type unsafeDB struct {
@@ -95,9 +98,9 @@ func (db *DB) Close() {
 
 // Key represents a single key with potentially multiple values.
 type key struct {
-	key         []byte
-	transaction *transaction
-	values      []value
+	key    []byte
+	txn    *Txn
+	values []value
 }
 
 func (k key) clone() key {
@@ -119,8 +122,8 @@ func (a byKey) Less(i, j int) bool {
 	return compare < 0
 }
 
-func (k *key) getAt(at time.Time) ([]byte, bool) {
-	if k.transaction != nil && k.transaction.status != StatusCommitted {
+func (k *key) getAt(txn *Txn, at time.Time) ([]byte, bool) {
+	if k.txn != nil && txn != txn && k.txn.status != StatusCommitted {
 		return nil, false
 	}
 	for _, v := range k.values {
@@ -159,7 +162,7 @@ type delta struct {
 	page *page
 }
 
-func (d delta) copy() *delta {
+func (d delta) clone() *delta {
 	return &d
 }
 
@@ -185,11 +188,15 @@ type unsafeDelta struct {
 
 // Get gets a value from the database.
 func (db *DB) Get(key []byte) ([]byte, bool) {
-	return db.GetAt(key, zeroTime)
+	return db.getAt(nil, key, zeroTime)
 }
 
 // GetAt gets a value from the database at the specified time.
 func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
+	return db.getAt(nil, key, at)
+}
+
+func (db *DB) getAt(txn *Txn, key []byte, at time.Time) ([]byte, bool) {
 	id := rootPage
 	delta := db.getPage(id).next
 	deltaCount := 0
@@ -216,22 +223,23 @@ func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
 			} else { // Data node
 				for _, entry := range page.keys {
 					if bytes.Equal(entry.key, key) {
-						return entry.getAt(at)
+						return entry.getAt(txn, at)
 					}
 				}
 				break
 			}
 		} else if delta.key != nil { // Check delta for match.
 			deltaCount++
-			txn := delta.key.transaction
+
 			// Skip uncommitted keys.
-			if txn != nil && txn.status != StatusCommitted {
+			t := delta.key.txn
+			if t != nil && t != txn && t.status != StatusCommitted {
 				delta = delta.next
 				continue
 			}
 			if bytes.Equal(key, delta.key.key) {
 				// If the time isn't found in the delta, look at older data.
-				if v, ok := delta.key.getAt(at); ok {
+				if v, ok := delta.key.getAt(txn, at); ok {
 					return v, true
 				}
 			}
@@ -242,10 +250,14 @@ func (db *DB) GetAt(key []byte, at time.Time) ([]byte, bool) {
 }
 
 // Put writes a value into the database.
-// TODO(d4l3k): Do conflict checks.
 func (db *DB) Put(k, v []byte) {
+	db.put(nil, k, v)
+}
+
+func (db *DB) put(txn *Txn, k, v []byte) {
 	db.putKey(&key{
 		key: k,
+		txn: txn,
 		values: []value{
 			{
 				value: v,
@@ -257,8 +269,13 @@ func (db *DB) Put(k, v []byte) {
 
 // Delete removes a value from the database.
 func (db *DB) Delete(k []byte) {
+	db.delete(nil, k)
+}
+
+func (db *DB) delete(txn *Txn, k []byte) {
 	db.putKey(&key{
 		key: k,
+		txn: txn,
 		values: []value{
 			{
 				tombstone: true,

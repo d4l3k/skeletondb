@@ -1,9 +1,10 @@
 package skeleton
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -11,45 +12,30 @@ var (
 	ErrTxnConflict = errors.New("an error occurred while committing the transaction")
 )
 
-type txnStatus int64
+// TransactionStatus represents the state of the transaction.
+type TransactionStatus int64
 
 // Status of the transaction.
 const (
-	StatusUnknown txnStatus = iota
+	StatusUnknown TransactionStatus = iota
 	StatusPending
 	StatusAborted
 	StatusCommitted
 )
 
-type transaction struct {
-	time   time.Time
-	status txnStatus
-}
-
-func (t *transaction) commit() error {
-	if !atomic.CompareAndSwapInt64((*int64)(&t.status), int64(StatusPending), int64(StatusCommitted)) {
-		return ErrTxnConflict
-	}
-	return nil
-}
-
 // Txn represents a transaction.
 type Txn struct {
-	transaction *transaction
-}
-
-// Commit commits the transaction.
-func (t *Txn) Commit() error {
-	return t.transaction.commit()
+	db     *DB
+	time   time.Time
+	status TransactionStatus
 }
 
 // NewTxn creates a new transaction.
 func (db *DB) NewTxn() *Txn {
 	return &Txn{
-		transaction: &transaction{
-			time:   time.Now(),
-			status: StatusPending,
-		},
+		db:     db,
+		time:   time.Now(),
+		status: StatusPending,
 	}
 }
 
@@ -66,4 +52,46 @@ func (db *DB) Txn(f func(*Txn) error) error {
 			return err
 		}
 	}
+}
+
+func (t *Txn) finish(status TransactionStatus) error {
+	if !atomic.CompareAndSwapInt64((*int64)(&t.status), int64(StatusPending), int64(status)) {
+		return errors.Wrapf(ErrTxnConflict, "status = %v", t.status)
+	}
+	return nil
+}
+
+// Commit commits the transaction.
+func (t *Txn) Commit() error {
+	return t.finish(StatusCommitted)
+}
+
+// Close aborts the transaction.
+func (t *Txn) Close() error {
+	return t.finish(StatusAborted)
+}
+
+// Status returns the current status of the transaction.
+func (t Txn) Status() TransactionStatus {
+	return t.status
+}
+
+// Put writes a value into the database.
+func (t *Txn) Put(k, v []byte) {
+	t.db.put(t, k, v)
+}
+
+// Delete removes a value from the database.
+func (t *Txn) Delete(k []byte) {
+	t.db.delete(t, k)
+}
+
+// Get gets a value from the database.
+func (t *Txn) Get(key []byte) ([]byte, bool) {
+	return t.db.getAt(t, key, zeroTime)
+}
+
+// GetAt gets a value from the database at the specified time.
+func (t *Txn) GetAt(key []byte, at time.Time) ([]byte, bool) {
+	return t.db.getAt(t, key, at)
 }
