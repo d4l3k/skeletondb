@@ -241,24 +241,30 @@ func TestTransactionPendingSplit(t *testing.T) {
 		}
 	}
 
-	k := intToKey(-100)
+	keys := [][]byte{[]byte("a"), []byte("z")}
 	txn := db.NewTxn()
-	txn.Put(k, k)
+	for _, k := range keys {
+		txn.Put(k, k)
+	}
 
 	// Force consolidation and splitting
 	db.consolidate(rootPage)
 	db.split(rootPage)
 
-	if v, _ := db.Get(k); v != nil {
-		t.Fatalf("db.Get(%q) = %q; not nil", k, v)
+	for _, k := range keys {
+		if v, _ := db.Get(k); v != nil {
+			t.Fatalf("db.Get(%q) = %q; not nil", k, v)
+		}
 	}
 
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
-	if v, _ := db.Get(k); !bytes.Equal(v, k) {
-		t.Fatalf("db.Get(%q) = %q; not %q", k, v, k)
+	for _, k := range keys {
+		if v, _ := db.Get(k); !bytes.Equal(v, k) {
+			t.Fatalf("db.Get(%q) = %q; not %q", k, v, k)
+		}
 	}
 }
 
@@ -305,5 +311,24 @@ func TestDBTxn(t *testing.T) {
 	expected := []byte{2}
 	if v, _ := db.Get(k); !bytes.Equal(v, expected) {
 		t.Fatalf("db.Get(%q) = %q; not %q", k, v, expected)
+	}
+}
+
+// TestDBTxnError verifies that you can return an error from db.Txn to the
+// outside.
+func TestDBTxnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	want := errors.New("foo")
+	if err := db.Txn(func(_ *Txn) error {
+		return want
+	}); err != want {
+		t.Fatalf("db.Txn() = %v; not %v", err, want)
 	}
 }

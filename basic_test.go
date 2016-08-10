@@ -35,6 +35,19 @@ func TestNewDBConfig(t *testing.T) {
 	}
 }
 
+// TestNewDBBadConfig tests that passing an invalid config into NewDB throws an
+// error.
+func TestNewDBBadConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := &Config{}
+	if err := c.Verify(); err == nil {
+		t.Fatalf("expected %v.Verify() to throw an error", c)
+	}
+	if _, err := NewDB(c); err == nil {
+		t.Fatalf("expected NewDB(%v) to throw an error", c)
+	}
+}
+
 // TestBasicGet tests that get requests on an empty database work as expected.
 func TestBasicGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testCases := []struct {
 		c   Config
 		err string
