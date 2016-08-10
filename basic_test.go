@@ -178,7 +178,9 @@ func TestBasicGetAt(t *testing.T) {
 	for i := 0; i < count; i++ {
 		k := intToKey(i)
 		v := intPrefix("new-val", i)
-		db.Put(k, v)
+		if err := db.Put(k, v); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Test read at old time.
