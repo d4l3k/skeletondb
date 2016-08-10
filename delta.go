@@ -7,9 +7,15 @@ import (
 
 // delta represents a single change to be applied to a page.
 type delta struct {
-	next *delta
 	key  *key
 	page *page
+	next *delta
+}
+
+type unsafeDelta struct {
+	key  *key
+	page *page
+	next unsafe.Pointer
 }
 
 func (d delta) clone() *delta {
@@ -55,8 +61,4 @@ func (d *delta) getPage() *page {
 		}
 	}
 	return d.page
-}
-
-type unsafeDelta struct {
-	next unsafe.Pointer
 }

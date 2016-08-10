@@ -119,7 +119,7 @@ func (a byKey) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a byKey) Less(i, j int) bool {
 	compare := bytes.Compare(a[i].key, a[j].key)
 	if compare == 0 {
-		return a[i].values[0].time.After(a[j].values[0].time)
+		return a[i].values[0].time.Before(a[j].values[0].time)
 	}
 	return compare < 0
 }

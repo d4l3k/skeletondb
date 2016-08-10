@@ -96,6 +96,61 @@ func TestTransactionPutCommit(t *testing.T) {
 	}
 }
 
+func TestTransactionDeleteCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 10
+
+	db, err := NewDB(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		if err := db.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	txn := db.NewTxn()
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		if err := txn.Delete(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		out, _ := txn.Get(k)
+		if out != nil {
+			t.Errorf("txn.Get(%q) = %q; not nil", k, out)
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		out, _ := db.Get(k)
+		if !bytes.Equal(out, k) {
+			t.Errorf("db.Get(%q) = %q; not %q", k, out, k)
+		}
+	}
+
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < count; i++ {
+		k := intToKey(i)
+		out, _ := txn.Get(k)
+		if out != nil {
+			t.Fatalf("db.Get(%q) = %q; not nil", k, out)
+		}
+	}
+}
+
 // TestTransactionSerializability tests that when two transactions conflict, one
 // is committed and the other is aborted.
 func TestTransactionSerializability(t *testing.T) {
