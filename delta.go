@@ -13,8 +13,8 @@ type delta struct {
 }
 
 type unsafeDelta struct {
-	key  *key
-	page *page
+	_    *key
+	_    *page
 	next unsafe.Pointer
 }
 
