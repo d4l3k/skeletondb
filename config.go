@@ -33,7 +33,7 @@ func (c Config) Verify() error {
 		return errors.New("MaxDeltaCount must be positive")
 	}
 	if c.GCTime < 0 {
-		return errors.New("GC time must not be negative")
+		return errors.New("GCTime must not be negative")
 	}
 	return nil
 }
