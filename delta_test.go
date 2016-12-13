@@ -4,11 +4,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/fortytw2/leaktest"
 )
 
 func TestDeltaIsPending(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	testCases := []struct {
 		d        *delta
@@ -60,7 +60,7 @@ func TestDeltaIsPending(t *testing.T) {
 }
 
 func TestDeltaGetPage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	testCases := []struct {
 		d        *delta
@@ -88,7 +88,7 @@ func TestDeltaGetPage(t *testing.T) {
 }
 
 func TestDeltaHasPendingTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	k := []byte("foo")
 	k2 := []byte("bar")

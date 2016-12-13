@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/fortytw2/leaktest"
 )
 
 func TestConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	testCases := []struct {
 		c   Config

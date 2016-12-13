@@ -7,8 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
 )
 
@@ -22,7 +21,8 @@ func intPrefix(prefix string, i int) []byte {
 // TestNewDBConfig makes sure a new DB with a nil config uses DefaultConfig.
 // instead.
 func TestNewDBConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
+
 	db, err := NewDB(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,8 @@ func TestNewDBConfig(t *testing.T) {
 // TestNewDBBadConfig tests that passing an invalid config into NewDB throws an
 // error.
 func TestNewDBBadConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
+
 	c := &Config{}
 	if err := c.Verify(); err == nil {
 		t.Fatalf("expected %v.Verify() to throw an error", c)
@@ -50,7 +51,7 @@ func TestNewDBBadConfig(t *testing.T) {
 
 // TestBasicGet tests that get requests on an empty database work as expected.
 func TestBasicGet(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	const count = 1000
 
@@ -73,7 +74,7 @@ func TestBasicGet(t *testing.T) {
 }
 
 func TestBasicPut(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	const count = 1000
 
@@ -92,7 +93,7 @@ func TestBasicPut(t *testing.T) {
 }
 
 func TestBasicPutGet(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -118,7 +119,7 @@ func TestBasicPutGet(t *testing.T) {
 }
 
 func TestBasicPutDelete(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -159,7 +160,7 @@ func TestBasicPutDelete(t *testing.T) {
 }
 
 func TestBasicGetAt(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -218,7 +219,7 @@ func TestBasicGetAt(t *testing.T) {
 }
 
 func TestConcurrentPutGet(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 100
 	const readers = 100
 	const writers = 100
@@ -261,7 +262,7 @@ func TestConcurrentPutGet(t *testing.T) {
 // TestConsolidate tests that deltas will be correctly consolidated when there
 // are too many of them.
 func TestConsolidate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -281,7 +282,7 @@ func TestConsolidate(t *testing.T) {
 		db.Get(k)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	succeedsSoon(t, func() error {
 		for i := range *db.pages {
 			id := pageID(i + 1)
 			count := db.getDeltaCount(id)
@@ -295,7 +296,7 @@ func TestConsolidate(t *testing.T) {
 
 // TestSplit tests that nodes are split when they get too large.
 func TestSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 1000
 
 	db, err := NewDB(nil)
@@ -315,7 +316,7 @@ func TestSplit(t *testing.T) {
 		db.Get(k)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	succeedsSoon(t, func() error {
 		for i := range *db.pages {
 			id := pageID(i + 1)
 			page := db.getPage(id).getPage()

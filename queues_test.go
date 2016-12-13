@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/fortytw2/leaktest"
 )
 
 func TestConsolidateOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	db, err := NewDB(nil)
 	if err != nil {

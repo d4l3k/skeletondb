@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
 )
 
 func TestTransactionCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	db, err := NewDB(nil)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestTransactionCommit(t *testing.T) {
 }
 
 func TestTransactionClose(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	db, err := NewDB(nil)
 	if err != nil {
@@ -51,7 +51,7 @@ func TestTransactionClose(t *testing.T) {
 }
 
 func TestTransactionPutCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 10
 
 	db, err := NewDB(nil)
@@ -97,7 +97,7 @@ func TestTransactionPutCommit(t *testing.T) {
 }
 
 func TestTransactionDeleteCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 10
 
 	db, err := NewDB(nil)
@@ -154,7 +154,7 @@ func TestTransactionDeleteCommit(t *testing.T) {
 // TestTransactionSerializability tests that when two transactions conflict, one
 // is committed and the other is aborted.
 func TestTransactionSerializability(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	db, err := NewDB(nil)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestTransactionSerializability(t *testing.T) {
 // TestTransactionPendingConsolidate tests that consolidation doesn't
 // consolidate pending transactions.
 func TestTransactionPendingConsolidate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 10
 
 	db, err := NewDB(nil)
@@ -225,7 +225,7 @@ func TestTransactionPendingConsolidate(t *testing.T) {
 // TestTransactionPendingSplit tests that splits handle pending transactions
 // correctly.
 func TestTransactionPendingSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 200
 
 	db, err := NewDB(nil)
@@ -271,7 +271,7 @@ func TestTransactionPendingSplit(t *testing.T) {
 // TestDBTxn tests that splits handle pending transactions
 // correctly.
 func TestDBTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 	const count = 200
 
 	db, err := NewDB(nil)
@@ -317,7 +317,7 @@ func TestDBTxn(t *testing.T) {
 // TestDBTxnError verifies that you can return an error from db.Txn to the
 // outside.
 func TestDBTxnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	defer leaktest.Check(t)()
 
 	db, err := NewDB(nil)
 	if err != nil {
